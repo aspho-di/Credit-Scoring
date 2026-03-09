@@ -124,11 +124,11 @@ Calibration does not improve ROC-AUC (ranking order unchanged) but makes the pro
 ## Project Structure
 
 ```
-credit-scoring-ml/
+credit-scoring/
     data/
         cs-training.csv        # place dataset here
     notebooks/
-        01_credit_scoring.ipynb
+        01_eda.ipynb
     README.md
     .gitignore
 ```
