@@ -3,7 +3,6 @@
 ![Python](https://img.shields.io/badge/Python-3.13-blue)
 ![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.627-green)
 ![Models](https://img.shields.io/badge/Models-LR%20%7C%20XGBoost%20%7C%20LightGBM%20%7C%20CatBoost-orange)
-![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
 
 A machine learning project predicting the probability of a borrower defaulting on a loan (90+ day delinquency within 2 years).
 
