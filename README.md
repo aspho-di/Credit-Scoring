@@ -1,5 +1,10 @@
 # Credit Default Prediction
 
+![Python](https://img.shields.io/badge/Python-3.13-blue)
+![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.627-green)
+![Models](https://img.shields.io/badge/Models-LR%20%7C%20XGBoost%20%7C%20LightGBM%20%7C%20CatBoost-orange)
+![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
+
 A machine learning project predicting the probability of a borrower defaulting on a loan (90+ day delinquency within 2 years).
 
 ---
@@ -57,9 +62,16 @@ Source: Give Me Some Credit (Kaggle)
 | CatBoost + Platt Scaling | **0.6270** | Best calibrated model |
 
 **Handling Class Imbalance**  
-Tested `class_weight='balanced'`, threshold tuning (0.17), and SMOTE oversampling. All methods improved recall for the minority class without significant ROC-AUC gain — indicating the main bottleneck was model capacity, not imbalance.
+Tested `class_weight='balanced'`, threshold tuning (0.17), SMOTE and ADASYN oversampling.
 
-`scale_pos_weight = 4.85` used in all gradient boosting models (ratio of negative to positive class).
+| Method | ROC-AUC | Notes |
+|---|---|---|
+| No balancing | 0.6014 | Predicts 0 for everything |
+| class_weight='balanced' | 0.6020 | Best for Logistic Regression |
+| SMOTE | 0.5954 | Adds noisy synthetic points |
+| ADASYN | 0.5901 | Focuses on boundary — still noisy |
+
+Conclusion: `scale_pos_weight = 4.85` used in all gradient boosting models. Oversampling degraded performance — consistent with feedback from Ragab Mahmoud (ML Researcher) on LinkedIn.
 
 **Cross-Validation**  
 Used `StratifiedKFold(n_splits=5)` to ensure consistent class distribution across all folds.
@@ -109,6 +121,57 @@ Calibration does not improve ROC-AUC (ranking order unchanged) but makes the pro
 
 ---
 
+## Industry Feedback (LinkedIn)
+
+This project was shared on LinkedIn and received feedback from practicing ML engineers.
+Three suggestions were implemented:
+
+**1. IV/WOE Feature Selection** *(suggested by Dilshod A'zamjonov)*
+
+Calculated Information Value for all features using standard banking methodology.
+
+| Feature | IV | Strength |
+|---|---|---|
+| DebtRatio | 0.0864 | Weak |
+| monthly_debt | 0.0667 | Weak |
+| age | 0.0333 | Weak |
+| RevolvingUtilization | 0.0297 | Weak |
+| Others | < 0.02 | Useless |
+
+Applying IV filtering (threshold 0.02) removed 11 of 15 features but **decreased** CatBoost ROC-AUC by 0.018.
+
+Key insight: IV measures linear relationships. Gradient boosting captures non-linear interactions — features with low IV can still contribute through combinations. IV filtering is most effective for Logistic Regression, not tree-based models. For boosting, SHAP-based selection is preferred.
+
+WOE transformation remains valuable for:
+- Regulatory reporting and model documentation
+- Explaining feature relationships to non-technical stakeholders
+- Improving Logistic Regression by linearising non-linear relationships
+
+**2. Model Stability on Unseen Data** *(suggested by Dejene Techane)*
+
+Implemented PSI (Population Stability Index) monitoring to detect data drift.
+
+Simulated a distribution shift: clients aged down by 15%, debt ratio increased by 30%.
+
+| Feature | PSI | Status |
+|---|---|---|
+| age | 0.4988 | Critical drift |
+| DebtRatio | 0.0650 | Stable |
+| MonthlyIncome | 0.0468 | Stable |
+| Others | < 0.02 | Stable |
+
+PSI thresholds: < 0.1 stable, 0.1–0.2 monitor, > 0.2 retrain.
+
+SHAP importance comparison between original and shifted data showed minimal change (max delta = 0.003), indicating the model's feature ranking is robust even under distribution shift — but absolute predictions may degrade.
+
+**3. SMOTE Noise Problem** *(suggested by Ragab Mahmoud)*
+
+Confirmed the concern. ADASYN focuses synthetic point generation on boundary cases (samples with many opposite-class neighbours), while SMOTE distributes uniformly. Both degraded performance vs `class_weight` on this dataset.
+
+Conclusion: with 17% minority class, the imbalance is moderate. `scale_pos_weight` is sufficient and introduces no noise.
+
+---
+
 ## Key Findings
 
 - Borrowers spending more than 50% of income on debt are significantly more likely to default
@@ -118,6 +181,30 @@ Calibration does not improve ROC-AUC (ranking order unchanged) but makes the pro
 - CatBoost outperforms XGBoost and LightGBM out of the box on this dataset
 - `has_real_estate` showed near-zero SHAP importance — property ownership alone is not predictive
 - Platt Scaling is preferred over Isotonic Regression when calibration data is limited
+- IV filtering hurts gradient boosting — use SHAP for feature selection instead
+- SMOTE/ADASYN introduce noise at moderate imbalance ratios — class weights are more reliable
+
+---
+
+## What Did Not Work (and Why)
+
+| Attempt | Result | Reason |
+|---|---|---|
+| IV filtering for CatBoost | −0.018 ROC-AUC | IV is linear; boosting uses non-linear combos |
+| SMOTE oversampling | −0.006 ROC-AUC | Synthetic points added noise near decision boundary |
+| ADASYN oversampling | −0.011 ROC-AUC | Same issue; boundary focus helped slightly but not enough |
+| Optuna 30 trials | −0.004 ROC-AUC | Too few trials; local optimum, not global |
+| Isotonic calibration | Unstable curve | Overfitted on small validation set |
+| LightGBM on small data | Stopped at iter #1 | LightGBM is optimised for large datasets (100k+) |
+
+---
+
+## Limitations
+
+- **Synthetic dataset**: generated to replicate Give Me Some Credit structure. Real Kaggle data would show stronger feature signals (IV up to 0.3–0.5 vs max 0.086 here)
+- **Dataset size**: 15,000 rows limits LightGBM and deep Optuna search
+- **No temporal split**: used random train/test split. Production models require time-based splitting to prevent future leakage
+- **Single notebook**: production code should separate data processing, training, and evaluation into modules
 
 ---
 
